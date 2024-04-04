@@ -12,6 +12,7 @@ using Distributions
 export ModelConfig, CharTokenizer, LanguageModel
 export load_gguf_model, load_karpathy_model, encode, sample
 export train
+export sampleObs
 
 # quantization
 include("quantization/utils.jl")

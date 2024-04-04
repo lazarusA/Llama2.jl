@@ -341,3 +341,101 @@ function sample(
 
     return nothing
 end
+
+"""
+sampleObs(
+    model::LanguageModel,
+    prompt::String = "",
+    output_prompt=[];
+    temperature::Float32 = 0.9f0,
+    stop_on_special_token = true,
+    max_seq_len = typemax(Int),
+    bos_token = true,
+)
+"""
+function sampleObs(
+    model::LanguageModel,
+    prompt::String = "",
+    output_prompt=[];
+    temperature::Float32 = 0.9f0,
+    stop_on_special_token = true,
+    max_seq_len = typemax(Int),
+    bos_token = true,
+)
+
+    if !bos_token && isempty(prompt)
+        error("Prompt cannot be empty if bos_token = false")
+    end
+
+    (; config, weights, tokenizer) = model
+
+    prompt_tokens = encode(prompt, tokenizer)
+
+    state = RunState(config)
+
+    time_start = time_ns()
+
+    bos_token_id = 2 # beginning of sentence token id
+    eos_token_id = 3 # end of sentence token id
+
+    if bos_token
+        pushfirst!(prompt_tokens, bos_token_id)
+    end
+
+    if !bos_token
+        print(tokenizer.id_to_token[prompt_tokens[1]])
+        push!(output_prompt, tokenizer.id_to_token[prompt_tokens[1]])
+    end
+
+    token = prompt_tokens[1]
+    generated_seq_len = 0
+
+    for pos in 1:min(config.seq_len, max_seq_len)
+        # forward the transformer to get logits for the next token
+        transformer!(token, pos, config, state, weights)
+        generated_seq_len += 1
+
+        if pos+1 <= length(prompt_tokens)
+            next = prompt_tokens[pos+1]
+        else
+            # sample the next token
+            if temperature == 0f0
+                # greedy argmax sampling
+                next = argmax(state.logits)
+            else
+                # apply the temperature to the logits
+                state.logits ./= temperature
+                # apply softmax to the logits to get the probabilities for next token
+                softmax!(state.logits)
+                # sample from this distribution to get the next token
+                next = wsample(1:config.vocab_size, state.logits)
+            end
+        end
+
+        if stop_on_special_token && (next == bos_token_id || next == eos_token_id)
+            break
+        end
+
+        next_str = tokenizer.id_to_token[next]
+
+        #if pos == 1 && length(prompt_tokens) >= 1
+        #    # do not print the input padding that we added
+        #    next_str = next_str[2:end]
+        #end
+
+        print(next_str)
+        push!(output_prompt, next_str)
+
+        # advance forward
+        token = next
+    end
+    push!(output_prompt, "\n")
+    println()
+
+    # report our achieved tok/s
+    time_end = time_ns()
+    @printf "-------\nachieved tok/s: %.2f\n" generated_seq_len / (time_end - time_start) * 1e9
+    push!(output_prompt, "-------\nachieved tok/s: %.2f\n $(generated_seq_len / (time_end - time_start) * 1e9)")
+    return nothing
+end
+
