@@ -15,12 +15,7 @@ export train
 export sampleObs
 
 # quantization
-include("quantization/utils.jl")
-include("quantization/common.jl")
-include("quantization/q4.jl")
-include("quantization/q6.jl")
-include("quantization/q8.jl")
-include("quantization/vecdot.jl")
+include("kquants.jl")
 
 # inference
 include("tokenizer.jl")
